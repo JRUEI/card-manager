@@ -33,18 +33,15 @@ main{padding:14px;max-width:600px;margin:0 auto}
 .summary-card .val{font-family:'DM Mono',monospace;font-size:1rem;font-weight:500}
 .summary-card .lbl{font-size:0.65rem;color:var(--muted);margin-top:2px}
 
-/* SORT MODE TOGGLE */
 .sort-toggle{display:flex;justify-content:flex-end;margin-bottom:8px}
 .sort-btn{background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:5px 12px;font-size:0.75rem;cursor:pointer;font-family:'Noto Sans TC',sans-serif;transition:all .2s}
 .sort-btn.active{border-color:#7c6ff7;color:#7c6ff7;background:rgba(124,111,247,0.1)}
 
-/* CARD LIST + DRAG */
 .card-list{display:flex;flex-direction:column;gap:10px}
 .card-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:box-shadow .2s,opacity .2s}
 .card-item.dragging{opacity:0.4;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
 .card-item.drag-over{box-shadow:0 0 0 2px #7c6ff7}
 
-/* DRAG HANDLE */
 .drag-handle{display:none;align-items:center;justify-content:center;width:36px;flex-shrink:0;cursor:grab;color:var(--muted);font-size:1.1rem;touch-action:none}
 .drag-handle:active{cursor:grabbing}
 .sort-mode .drag-handle{display:flex}
@@ -148,11 +145,18 @@ input[type="color"]{width:36px;height:36px;border-radius:50%;border:2px solid va
 .empty .big{font-size:2.5rem;margin-bottom:10px}
 .empty p{font-size:.82rem}
 
-/* LOADING */
 .loading-overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:500;gap:14px}
 .loading-spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:#7c6ff7;border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .loading-overlay p{font-size:.85rem;color:var(--muted)}
+
+/* SAVE STATUS */
+.save-status{position:fixed;bottom:16px;right:16px;font-size:0.7rem;color:var(--muted);display:flex;align-items:center;gap:5px;z-index:50;transition:opacity .5s}
+.save-dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.save-status.saving .save-dot{background:#f7a26f;animation:pulse .8s infinite}
+.save-status.saved .save-dot{background:#6ff7a2}
+.save-status.error .save-dot{background:var(--danger)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#7c6ff7;color:#fff;padding:9px 20px;border-radius:20px;font-size:.82rem;z-index:999;opacity:0;pointer-events:none;transition:opacity .3s;white-space:nowrap}
 .toast.show{opacity:1}
@@ -165,12 +169,12 @@ input[type="color"]{width:36px;height:36px;border-radius:50%;border:2px solid va
 
 <div class="loading-overlay" id="loadingOverlay">
   <div class="loading-spinner"></div>
-  <p>載入資料中...</p>
+  <p>連接雲端資料中...</p>
 </div>
 
 <header>
   <h1>💳 刷卡回饋管家</h1>
-  <p id="dateLabel">載入中...</p>
+  <p id="dateLabel"></p>
 </header>
 
 <div class="tabs">
@@ -268,14 +272,35 @@ input[type="color"]{width:36px;height:36px;border-radius:50%;border:2px solid va
   </div>
 </div>
 
+<div class="save-status" id="saveStatus">
+  <div class="save-dot"></div>
+  <span id="saveLabel">已同步</span>
+</div>
 <div class="toast" id="toast"></div>
 
-<script>
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ─── FIREBASE INIT ────────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyBgbDaBhwhzDWFUqMeoJNHTfQXcwjlgEW4",
+  authDomain: "card-manager-6d8e4.firebaseapp.com",
+  projectId: "card-manager-6d8e4",
+  storageBucket: "card-manager-6d8e4.firebasestorage.app",
+  messagingSenderId: "869363300263",
+  appId: "1:869363300263:web:5c5098b9d6fa9c14682882",
+  measurementId: "G-P53X9WHBB1"
+};
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+const DOC = doc(db, "data", "main");
+
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 const PRESET_COLORS=['#7c6ff7','#4f46e5','#0ea5e9','#10b981','#f59e0b','#ef4444','#ec4899','#8b5cf6','#14b8a6','#f97316','#06b6d4','#84cc16','#e11d48','#0284c7'];
 const CATEGORIES=['餐飲','超市','交通','娛樂','購物','旅遊','醫療','加油','訂閱','其他'];
 const MN=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
-const STORE_KEY='crm4_data';
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let cards=[], txns=[], rebate={};
@@ -284,6 +309,7 @@ let viewYear=now.getFullYear(), viewMonth=now.getMonth();
 let currentTab='cards', editCardId=null, txnCardId=null;
 let selectedColor='#7c6ff7', selectedCat='其他', filterCard='all';
 let sortMode=false, dragSrcIdx=null;
+let saveTimer=null;
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const mkey=()=>`${viewYear}-${String(viewMonth+1).padStart(2,'0')}`;
@@ -293,32 +319,51 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const getMonthTxns=id=>txns.filter(t=>t.cardId===id&&t.date.startsWith(mkey()));
 const getMonthSpend=id=>getMonthTxns(id).reduce((s,t)=>s+Number(t.amt||0),0);
 const getActual=id=>Number(rebate[`${id}_${mkey()}`]||0);
-function setActualStore(id,v){rebate[`${id}_${mkey()}`]=Number(v)||0;save()}
 
-// ─── PERSISTENT STORAGE ───────────────────────────────────────────────────────
+function setSaveStatus(status, label) {
+  const el=document.getElementById('saveStatus');
+  const lb=document.getElementById('saveLabel');
+  el.className='save-status '+status;
+  lb.textContent=label;
+}
+
+// ─── FIRESTORE LOAD / SAVE ────────────────────────────────────────────────────
 async function load() {
   try {
-    const res = await window.storage.get(STORE_KEY);
-    if (res && res.value) {
-      const d = JSON.parse(res.value);
+    setSaveStatus('saving','連線中...');
+    const snap = await getDoc(DOC);
+    if (snap.exists()) {
+      const d = snap.data();
       cards  = d.cards  || [];
       txns   = d.txns   || [];
       rebate = d.rebate || {};
     }
+    setSaveStatus('saved','已同步');
   } catch(e) {
-    // key doesn't exist yet — start fresh
-    cards=[]; txns=[]; rebate={};
+    setSaveStatus('error','連線失敗');
+    showToast('⚠️ 無法連接雲端，請檢查網路');
   }
   document.getElementById('loadingOverlay').style.display='none';
   render();
 }
 
-async function save() {
-  try {
-    await window.storage.set(STORE_KEY, JSON.stringify({cards, txns, rebate}));
-  } catch(e) {
-    showToast('⚠️ 儲存失敗');
-  }
+function scheduleSave() {
+  setSaveStatus('saving','儲存中...');
+  if(saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(async ()=>{
+    try {
+      await setDoc(DOC, { cards, txns, rebate });
+      setSaveStatus('saved','已同步 ✓');
+    } catch(e) {
+      setSaveStatus('error','儲存失敗 ✗');
+      showToast('⚠️ 儲存失敗，請檢查網路');
+    }
+  }, 800); // debounce 800ms
+}
+
+function setActualStore(id,v) {
+  rebate[`${id}_${mkey()}`]=Number(v)||0;
+  scheduleSave();
 }
 
 // ─── TAB / MONTH ──────────────────────────────────────────────────────────────
@@ -330,12 +375,15 @@ function switchTab(tab) {
   document.getElementById('tab-txns').classList.toggle('active',tab==='txns');
   render();
 }
+window.switchTab=switchTab;
+
 function changeMonth(d){
   viewMonth+=d;
   if(viewMonth>11){viewMonth=0;viewYear++}
   if(viewMonth<0){viewMonth=11;viewYear--}
   render();
 }
+window.changeMonth=changeMonth;
 
 // ─── SORT MODE ────────────────────────────────────────────────────────────────
 function toggleSortMode(){
@@ -343,45 +391,49 @@ function toggleSortMode(){
   const btn=document.getElementById('sortBtn');
   btn.textContent=sortMode?'✓ 完成排序':'⠿ 調整順序';
   btn.classList.toggle('active',sortMode);
-  const list=document.getElementById('cardList');
-  list.classList.toggle('sort-mode',sortMode);
+  document.getElementById('cardList').classList.toggle('sort-mode',sortMode);
   render();
 }
+window.toggleSortMode=toggleSortMode;
 
-// ─── DRAG & DROP (desktop + touch) ───────────────────────────────────────────
+// ─── DRAG & DROP ──────────────────────────────────────────────────────────────
 let touchDragEl=null, touchDragIdx=null, touchStartY=0, touchClone=null;
 
 function initDrag(el, idx) {
-  // Desktop
   el.draggable=true;
   el.addEventListener('dragstart',e=>{
     dragSrcIdx=idx;
     setTimeout(()=>el.classList.add('dragging'),0);
     e.dataTransfer.effectAllowed='move';
   });
-  el.addEventListener('dragend',()=>{el.classList.remove('dragging');document.querySelectorAll('.card-item').forEach(x=>x.classList.remove('drag-over'))});
-  el.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move';document.querySelectorAll('.card-item').forEach(x=>x.classList.remove('drag-over'));el.classList.add('drag-over')});
+  el.addEventListener('dragend',()=>{
+    el.classList.remove('dragging');
+    document.querySelectorAll('.card-item').forEach(x=>x.classList.remove('drag-over'));
+  });
+  el.addEventListener('dragover',e=>{
+    e.preventDefault();
+    document.querySelectorAll('.card-item').forEach(x=>x.classList.remove('drag-over'));
+    el.classList.add('drag-over');
+  });
   el.addEventListener('drop',e=>{
     e.preventDefault();
     el.classList.remove('drag-over');
-    const targetIdx=idx;
-    if(dragSrcIdx===null||dragSrcIdx===targetIdx)return;
+    if(dragSrcIdx===null||dragSrcIdx===idx)return;
     const moved=cards.splice(dragSrcIdx,1)[0];
-    cards.splice(targetIdx,0,moved);
+    cards.splice(idx,0,moved);
     dragSrcIdx=null;
-    save(); render();
+    scheduleSave(); render();
   });
 
-  // Touch
   const handle=el.querySelector('.drag-handle');
   if(!handle)return;
   handle.addEventListener('touchstart',e=>{
     if(!sortMode)return;
-    touchDragIdx=idx;
-    touchDragEl=el;
+    touchDragIdx=idx; touchDragEl=el;
     touchStartY=e.touches[0].clientY;
     touchClone=el.cloneNode(true);
-    touchClone.style.cssText=`position:fixed;left:${el.getBoundingClientRect().left}px;top:${el.getBoundingClientRect().top}px;width:${el.offsetWidth}px;opacity:.8;z-index:300;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,.5)`;
+    const r=el.getBoundingClientRect();
+    touchClone.style.cssText=`position:fixed;left:${r.left}px;top:${r.top}px;width:${el.offsetWidth}px;opacity:.85;z-index:300;pointer-events:none;box-shadow:0 8px 32px rgba(0,0,0,.5)`;
     document.body.appendChild(touchClone);
     el.style.opacity='0.3';
     e.preventDefault();
@@ -389,34 +441,32 @@ function initDrag(el, idx) {
   handle.addEventListener('touchmove',e=>{
     if(touchDragIdx===null)return;
     const dy=e.touches[0].clientY-touchStartY;
-    touchClone.style.top=(touchDragEl.getBoundingClientRect().top+dy)+'px';
-    // find target
+    const r=touchDragEl.getBoundingClientRect();
+    touchClone.style.top=(r.top+dy)+'px';
     const els=[...document.querySelectorAll('.card-item')];
     const my=e.touches[0].clientY;
-    let targetI=touchDragIdx;
-    els.forEach((x,i)=>{
-      const r=x.getBoundingClientRect();
-      if(my>r.top&&my<r.bottom)targetI=i;
-    });
     els.forEach(x=>x.classList.remove('drag-over'));
-    if(targetI!==touchDragIdx)els[targetI]?.classList.add('drag-over');
+    els.forEach((x,i)=>{
+      const xr=x.getBoundingClientRect();
+      if(my>xr.top&&my<xr.bottom&&i!==touchDragIdx) x.classList.add('drag-over');
+    });
     e.preventDefault();
   },{passive:false});
   handle.addEventListener('touchend',e=>{
     if(touchDragIdx===null)return;
-    document.body.removeChild(touchClone);touchClone=null;
+    document.body.removeChild(touchClone); touchClone=null;
     touchDragEl.style.opacity='';
-    document.querySelectorAll('.card-item').forEach(x=>x.classList.remove('drag-over'));
     const els=[...document.querySelectorAll('.card-item')];
+    els.forEach(x=>x.classList.remove('drag-over'));
     const my=e.changedTouches[0].clientY;
     let targetI=touchDragIdx;
     els.forEach((x,i)=>{const r=x.getBoundingClientRect();if(my>r.top&&my<r.bottom)targetI=i});
     if(targetI!==touchDragIdx){
       const moved=cards.splice(touchDragIdx,1)[0];
       cards.splice(targetI,0,moved);
-      save();
+      scheduleSave();
     }
-    touchDragIdx=null;touchDragEl=null;
+    touchDragIdx=null; touchDragEl=null;
     render();
   });
 }
@@ -434,8 +484,7 @@ function render(){
 function renderCards(){
   const list=document.getElementById('cardList');
   list.innerHTML='';
-  if(sortMode)list.classList.add('sort-mode');
-  else list.classList.remove('sort-mode');
+  list.classList.toggle('sort-mode',sortMode);
   let ss=0,se=0,sa=0;
   if(!cards.length){
     list.innerHTML=`<div class="empty"><div class="big">💳</div><p>尚無卡片，點下方按鈕新增！</p></div>`;
@@ -449,7 +498,7 @@ function renderCards(){
     const expect=Math.round(Math.min(spend,cap)*pct/100);
     const prog=cap>0?Math.min(spend/cap,1):0;
     const progN=Math.round(prog*100);
-    ss+=spend;se+=expect;sa+=actual;
+    ss+=spend; se+=expect; sa+=actual;
     const fillColor=progN>=100?'#6ff7a2':progN>=80?'#f59e0b':color;
     const monthT=getMonthTxns(c.id);
     const bankAbbr=(c.bank||'銀').slice(0,2);
@@ -504,7 +553,8 @@ function renderCards(){
         <div class="txn-list">${txnHTML}</div>
         <div class="rebate-input-row">
           <label>實際回饋入帳 $</label>
-          <input type="number" value="${actual||''}" placeholder="尚未入帳" onchange="setActualStore('${c.id}',this.value);render()"/>
+          <input type="number" value="${actual||''}" placeholder="尚未入帳"
+            onchange="setActualStore('${c.id}',this.value);render()"/>
         </div>
         <div style="font-size:.7rem;color:var(--muted);margin-bottom:10px">
           📅 ${c.cycle==='billing'?`帳單週期（結帳日：每月 ${c.billDay||25} 日）`:'每月 1 日起算'}
@@ -523,11 +573,11 @@ function renderCards(){
 }
 
 function headerClick(e,id){
-  if(sortMode)return; // don't expand in sort mode
-  const handle=e.target.closest('.drag-handle');
-  if(handle)return;
+  if(sortMode)return;
+  if(e.target.closest('.drag-handle'))return;
   toggleBody(id);
 }
+window.headerClick=headerClick;
 
 function toggleBody(id){
   const b=document.getElementById('body_'+id);
@@ -564,7 +614,7 @@ function renderAllTxns(){
     </div>`;
   }).join('');
 }
-function setFilter(id){filterCard=id;render()}
+window.setFilter=id=>{filterCard=id;render()};
 
 // ─── CARD MODAL ───────────────────────────────────────────────────────────────
 function buildColorPicker(sel){
@@ -573,6 +623,7 @@ function buildColorPicker(sel){
   document.getElementById('customColor').value=selectedColor;
 }
 function selectColor(c){selectedColor=c;document.getElementById('customColor').value=c;buildColorPicker(c)}
+window.selectColor=selectColor;
 
 function openCardModal(id){
   editCardId=id||null;
@@ -588,7 +639,10 @@ function openCardModal(id){
   buildColorPicker(c?.color||'#7c6ff7');
   document.getElementById('cardModal').classList.add('open');
 }
+window.openCardModal=openCardModal;
+
 function closeCardModal(){document.getElementById('cardModal').classList.remove('open')}
+window.closeCardModal=closeCardModal;
 
 async function saveCard(){
   const name=document.getElementById('f_name').value.trim();
@@ -596,15 +650,18 @@ async function saveCard(){
   const data={id:editCardId||uid(),name,bank:document.getElementById('f_bank').value,billDay:document.getElementById('f_billDay').value||25,pct:document.getElementById('f_pct').value||0,cap:document.getElementById('f_cap').value||0,cycle:document.getElementById('f_cycle').value,note:document.getElementById('f_note').value.trim(),color:selectedColor};
   if(editCardId){const i=cards.findIndex(x=>x.id===editCardId);if(i>=0)cards[i]=data}
   else cards.push(data);
-  await save();
-  closeCardModal();render();showToast(editCardId?'卡片已更新 ✓':'新增成功 ✓');
+  scheduleSave();
+  closeCardModal(); render(); showToast(editCardId?'卡片已更新 ✓':'新增成功 ✓');
 }
+window.saveCard=saveCard;
 
 async function delCard(id){
   if(!confirm('確定要刪除這張卡片？（消費記錄也會一起刪除）'))return;
-  cards=cards.filter(c=>c.id!==id);txns=txns.filter(t=>t.cardId!==id);
-  await save();render();showToast('已刪除');
+  cards=cards.filter(c=>c.id!==id);
+  txns=txns.filter(t=>t.cardId!==id);
+  scheduleSave(); render(); showToast('已刪除');
 }
+window.delCard=delCard;
 
 // ─── TXN MODAL ────────────────────────────────────────────────────────────────
 function buildCatChips(sel){
@@ -612,12 +669,15 @@ function buildCatChips(sel){
   document.getElementById('catChips').innerHTML=CATEGORIES.map(c=>`<div class="cat-chip ${c===selectedCat?'selected':''}" onclick="selectCat('${c}')">${c}</div>`).join('');
 }
 function selectCat(c){selectedCat=c;buildCatChips(c)}
+window.selectCat=selectCat;
 
 function openTxnModal(cardId){
   txnCardId=cardId;
   const card=cards.find(c=>c.id===cardId);
   document.getElementById('txnModalTitle').textContent=`📝 新增消費 — ${card?.name||''}`;
-  document.getElementById('t_amt').value='';document.getElementById('t_name').value='';document.getElementById('t_note').value='';
+  document.getElementById('t_amt').value='';
+  document.getElementById('t_name').value='';
+  document.getElementById('t_note').value='';
   const td=new Date();
   const y=viewYear,m=String(viewMonth+1).padStart(2,'0');
   const d=td.getFullYear()===viewYear&&td.getMonth()===viewMonth?String(td.getDate()).padStart(2,'0'):String(new Date(viewYear,viewMonth+1,0).getDate()).padStart(2,'0');
@@ -625,21 +685,30 @@ function openTxnModal(cardId){
   buildCatChips('其他');
   document.getElementById('txnModal').classList.add('open');
 }
+window.openTxnModal=openTxnModal;
+
 function closeTxnModal(){document.getElementById('txnModal').classList.remove('open')}
+window.closeTxnModal=closeTxnModal;
 
 async function saveTxn(){
   const amt=parseFloat(document.getElementById('t_amt').value);
   if(!amt||amt<=0){showToast('請輸入金額');return}
   txns.push({id:uid(),cardId:txnCardId,amt,date:document.getElementById('t_date').value,name:document.getElementById('t_name').value.trim()||'消費',cat:selectedCat,note:document.getElementById('t_note').value.trim()});
-  await save();closeTxnModal();render();showToast('已新增 ✓');
+  scheduleSave(); closeTxnModal(); render(); showToast('已新增 ✓');
 }
+window.saveTxn=saveTxn;
 
-async function delTxn(id){
-  txns=txns.filter(t=>t.id!==id);await save();render();
+function delTxn(id){
+  txns=txns.filter(t=>t.id!==id);
+  scheduleSave(); render();
 }
+window.delTxn=delTxn;
+
+window.setActualStore=setActualStore;
 
 function showToast(msg){
-  const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'),2200);
 }
 
