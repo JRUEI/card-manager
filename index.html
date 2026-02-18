@@ -76,6 +76,19 @@ main{padding:14px;max-width:600px;margin:0 auto}
 
 .add-txn-btn{width:100%;padding:9px;border-radius:8px;border:1px dashed var(--border);background:transparent;color:var(--muted);font-size:.8rem;cursor:pointer;margin-bottom:10px;transition:all .2s;font-family:'Noto Sans TC',sans-serif}
 
+/* CARD INFO SECTIONS */
+.card-info-block{margin-bottom:10px}
+.card-info-label{font-size:.68rem;color:var(--muted);margin-bottom:4px;display:flex;align-items:center;gap:4px}
+.card-link{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;color:#7c6ff7;text-decoration:none;background:rgba(124,111,247,.1);border:1px solid rgba(124,111,247,.25);border-radius:8px;padding:7px 12px;width:100%;overflow:hidden}
+.card-link span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.card-link:hover{background:rgba(124,111,247,.2)}
+.card-memo{font-size:.78rem;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;line-height:1.6;white-space:pre-wrap;word-break:break-all}
+.min-spend-alert{display:flex;align-items:flex-start;gap:8px;background:rgba(247,162,111,.08);border:1px solid rgba(247,162,111,.25);border-radius:8px;padding:9px 12px}
+.min-spend-alert .icon{font-size:1rem;flex-shrink:0;margin-top:1px}
+.min-spend-alert .text{font-size:.78rem;color:#f7c26f;line-height:1.5}
+.form-group textarea{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:.88rem;outline:none;transition:border-color .2s;font-family:'Noto Sans TC',sans-serif;resize:vertical;min-height:80px;line-height:1.5}
+.form-group textarea:focus{border-color:#7c6ff7}
+
 .txn-list{display:flex;flex-direction:column;gap:5px;margin-bottom:10px;max-height:220px;overflow-y:auto}
 .txn-item{display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:8px;padding:8px 10px;font-size:.78rem}
 .txn-left{display:flex;flex-direction:column;gap:1px;min-width:0}
@@ -247,6 +260,9 @@ input[type="color"]{width:36px;height:36px;border-radius:50%;border:2px solid va
       </div>
     </div>
     <div class="form-group"><label>備註（選填）</label><input id="f_note" placeholder="例：海外 3%，國內 1%"/></div>
+    <div class="form-group"><label>🔗 卡片官網連結（選填）</label><input id="f_url" placeholder="https://www.cathaybank.com.tw/..."/></div>
+    <div class="form-group"><label>⚠️ 低消提示（選填）</label><input id="f_minspend" placeholder="例：單筆滿 3,000 才有回饋"/></div>
+    <div class="form-group"><label>📝 卡片筆記（選填）</label><textarea id="f_memo" placeholder="記錄這張卡的使用技巧、限制條件..."></textarea></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeCardModal()">取消</button>
       <button class="btn-primary" onclick="saveCard()">儲存</button>
@@ -556,7 +572,24 @@ function renderCards(){
           <input type="number" value="${actual||''}" placeholder="尚未入帳"
             onchange="setActualStore('${c.id}',this.value);render()"/>
         </div>
-        <div style="font-size:.7rem;color:var(--muted);margin-bottom:10px">
+        ${c.minspend ? `
+        <div class="min-spend-alert">
+          <div class="icon">⚠️</div>
+          <div class="text">${esc(c.minspend)}</div>
+        </div>` : ''}
+        ${c.memo ? `
+        <div class="card-info-block">
+          <div class="card-info-label">📝 筆記</div>
+          <div class="card-memo">${esc(c.memo)}</div>
+        </div>` : ''}
+        ${c.url ? `
+        <div class="card-info-block">
+          <div class="card-info-label">🔗 卡片官網</div>
+          <a class="card-link" href="${esc(c.url)}" target="_blank" rel="noopener">
+            <span>🌐</span><span>${esc(c.url)}</span>
+          </a>
+        </div>` : ''}
+        <div style="font-size:.7rem;color:var(--muted);margin-bottom:10px;margin-top:4px">
           📅 ${c.cycle==='billing'?`帳單週期（結帳日：每月 ${c.billDay||25} 日）`:'每月 1 日起算'}
         </div>
         <div class="card-actions">
@@ -636,6 +669,9 @@ function openCardModal(id){
   document.getElementById('f_cap').value=c?.cap||'';
   document.getElementById('f_cycle').value=c?.cycle||'billing';
   document.getElementById('f_note').value=c?.note||'';
+  document.getElementById('f_url').value=c?.url||'';
+  document.getElementById('f_minspend').value=c?.minspend||'';
+  document.getElementById('f_memo').value=c?.memo||'';
   buildColorPicker(c?.color||'#7c6ff7');
   document.getElementById('cardModal').classList.add('open');
 }
@@ -647,7 +683,7 @@ window.closeCardModal=closeCardModal;
 async function saveCard(){
   const name=document.getElementById('f_name').value.trim();
   if(!name){showToast('請輸入卡片名稱');return}
-  const data={id:editCardId||uid(),name,bank:document.getElementById('f_bank').value,billDay:document.getElementById('f_billDay').value||25,pct:document.getElementById('f_pct').value||0,cap:document.getElementById('f_cap').value||0,cycle:document.getElementById('f_cycle').value,note:document.getElementById('f_note').value.trim(),color:selectedColor};
+  const data={id:editCardId||uid(),name,bank:document.getElementById('f_bank').value,billDay:document.getElementById('f_billDay').value||25,pct:document.getElementById('f_pct').value||0,cap:document.getElementById('f_cap').value||0,cycle:document.getElementById('f_cycle').value,note:document.getElementById('f_note').value.trim(),color:selectedColor,url:document.getElementById('f_url').value.trim(),minspend:document.getElementById('f_minspend').value.trim(),memo:document.getElementById('f_memo').value.trim()};
   if(editCardId){const i=cards.findIndex(x=>x.id===editCardId);if(i>=0)cards[i]=data}
   else cards.push(data);
   scheduleSave();
