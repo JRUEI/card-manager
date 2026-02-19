@@ -110,6 +110,14 @@ main{padding:14px;max-width:600px;margin:0 auto}
 .billing-sub{font-size:.68rem;color:var(--muted);margin-top:1px}
 .billing-day{font-family:'DM Mono',monospace;font-size:.9rem;color:var(--text);text-align:right;flex-shrink:0;line-height:1.6}
 .billing-day span{font-size:.62rem;color:var(--muted);font-family:'Noto Sans TC',sans-serif;display:block}
+.billing-day-input{
+  font-family:'DM Mono',monospace;font-size:1rem;font-weight:700;color:var(--text);
+  background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  width:48px;text-align:center;padding:4px 4px;outline:none;
+  transition:border-color .2s;
+}
+.billing-day-input:focus{border-color:#7c6ff7;color:#c4beff}
+.billing-day-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
 
 .rebate-input-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .rebate-input-row label{font-size:.75rem;color:var(--muted);white-space:nowrap}
@@ -238,7 +246,7 @@ input[type="color"]{width:36px;height:36px;border-radius:50%;border:2px solid va
   </div>
 
   <div id="view-billing" style="display:none">
-    <div style="margin-top:4px;margin-bottom:14px;font-size:.78rem;color:var(--muted)">各卡結帳日一覽，點卡片可編輯</div>
+    <div style="margin-top:4px;margin-bottom:14px;font-size:.78rem;color:var(--muted)">直接點結帳日數字即可修改，會同步更新該行所有卡片</div>
     <div class="billing-list" id="billingList"></div>
   </div>
 </main>
@@ -591,7 +599,7 @@ function renderCards(){
           <div class="bank-chip" style="background:${color}">${esc(bankAbbr)}</div>
           <div>
             <div class="card-name">${esc(c.name)}</div>
-            <div class="card-sub">${c.note?esc(c.note):`${pct}% 回饋 · 上限 $${fmt(cap)}`}</div>
+            <div class="card-sub">${c.note?esc(c.note):`${pct}% 回饋 · 上限 $${fmt(cap)}`} <span style="color:var(--muted);opacity:.7">·</span> 📅 ${c.cycle==='billing'?getBillingPeriod(c.billDay):'每月1日起'}</div>
           </div>
         </div>
         <div class="card-right">
@@ -700,17 +708,20 @@ window.setFilter=id=>{filterCard=id;render()};
 function renderBilling(){
   const list=document.getElementById('billingList');
   if(!cards.length){list.innerHTML=`<div class="empty"><div class="big">📅</div><p>尚無卡片</p></div>`;return}
-  // Group by bank, pick first card's color and billDay per bank
+  // Group by bank
   const bankMap={};
   cards.forEach(c=>{
     if(!bankMap[c.bank]) bankMap[c.bank]={bank:c.bank,color:c.color||'#7c6ff7',billDay:c.billDay,cards:[]};
     bankMap[c.bank].cards.push(c.name);
+    // use lowest billDay if mismatch (shouldn't happen but safety)
+    if(!bankMap[c.bank].billDay && c.billDay) bankMap[c.bank].billDay=c.billDay;
   });
   list.innerHTML=Object.values(bankMap).map(b=>{
     const abbr=(b.bank||'銀').slice(0,2);
-    const day=b.billDay||'?';
-    const period=day!=='?'?getBillingPeriod(day):'—';
+    const day=b.billDay||'';
+    const period=day?getBillingPeriod(day):'—';
     const cardNames=b.cards.join('、');
+    const bankKey=encodeURIComponent(b.bank);
     return `<div class="billing-item" style="--bc:${b.color}">
       <div class="billing-bank">
         <div class="billing-chip" style="background:${b.color}">${esc(abbr)}</div>
@@ -719,13 +730,32 @@ function renderBilling(){
           <div class="billing-sub">${esc(cardNames)}</div>
         </div>
       </div>
-      <div class="billing-day">
-        每月 ${day} 日<br>
-        <span>本期 ${period}</span>
+      <div class="billing-day-wrap">
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:.68rem;color:var(--muted);font-family:'Noto Sans TC',sans-serif">每月</span>
+          <input class="billing-day-input" type="number" min="1" max="31"
+            value="${day}" placeholder="日"
+            onchange="updateBankBillDay('${bankKey}',this.value)"
+            onclick="this.select()" />
+          <span style="font-size:.68rem;color:var(--muted);font-family:'Noto Sans TC',sans-serif">日結帳</span>
+        </div>
+        <span style="font-size:.62rem;color:var(--muted);font-family:'Noto Sans TC',sans-serif;text-align:right" id="bp_${bankKey}">${period}</span>
       </div>
     </div>`;
   }).join('');
 }
+
+function updateBankBillDay(bankKey, val){
+  const bank=decodeURIComponent(bankKey);
+  const day=Math.min(31,Math.max(1,parseInt(val)||1));
+  // update all cards of this bank
+  cards.forEach(c=>{ if(c.bank===bank) c.billDay=day; });
+  scheduleSave();
+  // update period display inline without full re-render
+  const el=document.getElementById('bp_'+bankKey);
+  if(el) el.textContent=getBillingPeriod(day);
+}
+window.updateBankBillDay=updateBankBillDay;
 
 // ─── CARD MODAL ───────────────────────────────────────────────────────────────
 function buildColorPicker(sel){
