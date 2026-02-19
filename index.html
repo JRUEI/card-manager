@@ -50,7 +50,7 @@ main{padding:14px;max-width:600px;margin:0 auto}
 .card-header{display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer;user-select:none;border-left:4px solid var(--cc,#7c6ff7)}
 .sort-mode .card-header{padding-left:0}
 .card-left{display:flex;align-items:center;gap:11px}
-.bank-chip{width:52px;height:34px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:800;color:#fff;flex-shrink:0;letter-spacing:0.02em;text-shadow:0 1px 3px rgba(0,0,0,0.4)}
+.bank-chip{width:58px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.85rem;font-weight:900;color:#fff;flex-shrink:0;letter-spacing:0.02em;text-shadow:0 1px 4px rgba(0,0,0,0.5)}
 .card-name{font-size:0.88rem;font-weight:600}
 .card-sub{font-size:0.7rem;color:var(--muted);margin-top:1px}
 .card-right{display:flex;align-items:center;gap:6px}
@@ -105,11 +105,11 @@ main{padding:14px;max-width:600px;margin:0 auto}
 .billing-list{display:flex;flex-direction:column;gap:8px}
 .billing-item{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;border-left:4px solid var(--bc,#7c6ff7)}
 .billing-bank{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
-.billing-chip{width:52px;height:34px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:800;color:#fff;flex-shrink:0;text-shadow:0 1px 3px rgba(0,0,0,0.4)}
+.billing-chip{width:58px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:0.85rem;font-weight:900;color:#fff;flex-shrink:0;text-shadow:0 1px 4px rgba(0,0,0,0.5)}
 .billing-name{font-size:.85rem;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .billing-sub{font-size:.68rem;color:var(--muted);margin-top:1px}
-.billing-day{font-family:'DM Mono',monospace;font-size:.9rem;color:var(--text);text-align:right;flex-shrink:0}
-.billing-day span{font-size:.65rem;color:var(--muted);font-family:'Noto Sans TC',sans-serif}
+.billing-day{font-family:'DM Mono',monospace;font-size:.9rem;color:var(--text);text-align:right;flex-shrink:0;line-height:1.6}
+.billing-day span{font-size:.62rem;color:var(--muted);font-family:'Noto Sans TC',sans-serif;display:block}
 
 .rebate-input-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .rebate-input-row label{font-size:.75rem;color:var(--muted);white-space:nowrap}
@@ -358,6 +358,24 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const getMonthTxns=id=>txns.filter(t=>t.cardId===id&&t.date.startsWith(mkey()));
 const getMonthSpend=id=>getMonthTxns(id).reduce((s,t)=>s+Number(t.amt||0),0);
 const getActual=id=>Number(rebate[`${id}_${mkey()}`]||0);
+
+function getBillingPeriod(billDay) {
+  const today=new Date();
+  const bd=Number(billDay)||25;
+  const d=today.getDate();
+  // if today is on or before billDay, current period ends this month on billDay
+  // if today is after billDay, current period ends next month
+  let endY=today.getFullYear(), endM=today.getMonth();
+  if(d>bd){ endM++; if(endM>11){endM=0;endY++;} }
+  let startM=endM-1, startY=endY;
+  if(startM<0){startM=11;startY--;}
+  const startD=bd+1;
+  // handle if startD overflows the start month
+  const daysInStart=new Date(startY,startM+1,0).getDate();
+  let sd=startD,sm=startM,sy=startY;
+  if(sd>daysInStart){sd=1;sm++;if(sm>11){sm=0;sy++;}}
+  return `${sm+1}/${sd} - ${endM+1}/${bd}`;
+}
 
 function setSaveStatus(status, label) {
   const el=document.getElementById('saveStatus');
@@ -617,7 +635,9 @@ function renderCards(){
           </a>
         </div>` : ''}
         <div style="font-size:.7rem;color:var(--muted);margin-bottom:10px;margin-top:4px">
-          📅 ${c.cycle==='billing'?`帳單週期（結帳日：每月 ${c.billDay||25} 日）`:'每月 1 日起算'}
+          📅 ${c.cycle==='billing'
+            ? `本期帳單：${getBillingPeriod(c.billDay)}（結帳日每月 ${c.billDay||25} 日）`
+            : `每月 1 日起算`}
         </div>
         <div class="card-actions">
           <button class="btn-sm btn-edit" onclick="openCardModal('${c.id}')">✎ 編輯卡片</button>
@@ -670,6 +690,7 @@ function renderAllTxns(){
         <div class="all-txn-amt" style="color:${color}">$${fmt(t.amt)}</div>
         <div class="all-txn-card">${card?esc(card.name):'已刪除'}</div>
       </div>
+      <button class="txn-edit" onclick="editTxn('${t.id}','${t.cardId}')" style="font-size:.9rem;padding:4px 6px">✎</button>
       <button class="all-txn-del" onclick="delTxn('${t.id}')">✕</button>
     </div>`;
   }).join('');
@@ -679,20 +700,29 @@ window.setFilter=id=>{filterCard=id;render()};
 function renderBilling(){
   const list=document.getElementById('billingList');
   if(!cards.length){list.innerHTML=`<div class="empty"><div class="big">📅</div><p>尚無卡片</p></div>`;return}
-  // group by bank, show same-bank cards together
-  list.innerHTML=cards.map(c=>{
-    const color=c.color||'#7c6ff7';
-    const bankAbbr=(c.bank||'銀').slice(0,2);
-    const day=c.billDay||'?';
-    return `<div class="billing-item" style="--bc:${color}" onclick="openCardModal('${c.id}')">
+  // Group by bank, pick first card's color and billDay per bank
+  const bankMap={};
+  cards.forEach(c=>{
+    if(!bankMap[c.bank]) bankMap[c.bank]={bank:c.bank,color:c.color||'#7c6ff7',billDay:c.billDay,cards:[]};
+    bankMap[c.bank].cards.push(c.name);
+  });
+  list.innerHTML=Object.values(bankMap).map(b=>{
+    const abbr=(b.bank||'銀').slice(0,2);
+    const day=b.billDay||'?';
+    const period=day!=='?'?getBillingPeriod(day):'—';
+    const cardNames=b.cards.join('、');
+    return `<div class="billing-item" style="--bc:${b.color}">
       <div class="billing-bank">
-        <div class="billing-chip" style="background:${color}">${esc(bankAbbr)}</div>
+        <div class="billing-chip" style="background:${b.color}">${esc(abbr)}</div>
         <div>
-          <div class="billing-name">${esc(c.name)}</div>
-          <div class="billing-sub">${esc(c.bank)}</div>
+          <div class="billing-name">${esc(b.bank)}</div>
+          <div class="billing-sub">${esc(cardNames)}</div>
         </div>
       </div>
-      <div class="billing-day">每月 ${day} 日<br><span>結帳日</span></div>
+      <div class="billing-day">
+        每月 ${day} 日<br>
+        <span>本期 ${period}</span>
+      </div>
     </div>`;
   }).join('');
 }
