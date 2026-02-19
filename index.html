@@ -599,13 +599,18 @@ function renderCards(){
           <div class="bank-chip" style="background:${color}">${esc(bankAbbr)}</div>
           <div>
             <div class="card-name">${esc(c.name)}</div>
-            <div class="card-sub">${c.note?esc(c.note):`${pct}% 回饋 · 上限 $${fmt(cap)}`} <span style="color:var(--muted);opacity:.7">·</span> 📅 ${c.cycle==='billing'?getBillingPeriod(c.billDay):'每月1日起'}</div>
+            <div class="card-sub">${c.note?esc(c.note):`${pct}% 回饋 · 上限 $${fmt(cap)}`}</div>
           </div>
         </div>
-        <div class="card-right">
-          <span class="pct-badge" style="background:${color}">${pct}%</span>
-          ${remainBadge}
-          <span style="color:var(--muted);font-size:.8rem" id="chev_${c.id}">▼</span>
+        <div class="card-right" style="flex-direction:column;align-items:flex-end;gap:4px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span class="pct-badge" style="background:${color}">${pct}%</span>
+            ${remainBadge}
+            <span style="color:var(--muted);font-size:.8rem" id="chev_${c.id}">▼</span>
+          </div>
+          <div style="font-size:.63rem;color:var(--muted);font-family:'DM Mono',monospace">
+            ${c.cycle==='billing'?getBillingPeriod(c.billDay):'每月1日起'}
+          </div>
         </div>
       </div>
       <div class="card-body" id="body_${c.id}">
