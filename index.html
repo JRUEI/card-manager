@@ -602,15 +602,15 @@ function renderCards(){
             <div class="card-sub">${c.note?esc(c.note):`${pct}% 回饋 · 上限 $${fmt(cap)}`}</div>
           </div>
         </div>
-        <div class="card-right" style="flex-direction:column;align-items:flex-end;gap:4px">
-          <div style="display:flex;align-items:center;gap:6px">
-            <span class="pct-badge" style="background:${color}">${pct}%</span>
-            ${remainBadge}
-            <span style="color:var(--muted);font-size:.8rem" id="chev_${c.id}">▼</span>
+        <div class="card-right" style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <span class="pct-badge" style="background:${color};font-size:.82rem;padding:4px 10px">${pct}%</span>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
+            ${remainBadge||`<span style="font-size:.63rem;color:var(--muted)">—</span>`}
+            <div style="font-size:.63rem;color:var(--muted);font-family:'DM Mono',monospace;line-height:1">
+              ${c.cycle==='billing'?getBillingPeriod(c.billDay):'每月1日起'}
+            </div>
           </div>
-          <div style="font-size:.63rem;color:var(--muted);font-family:'DM Mono',monospace">
-            ${c.cycle==='billing'?getBillingPeriod(c.billDay):'每月1日起'}
-          </div>
+          <span style="color:var(--muted);font-size:.8rem;align-self:center" id="chev_${c.id}">▼</span>
         </div>
       </div>
       <div class="card-body" id="body_${c.id}">
