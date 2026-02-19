@@ -50,7 +50,7 @@ main{padding:14px;max-width:600px;margin:0 auto}
 .card-header{display:flex;align-items:center;justify-content:space-between;padding:13px 14px;cursor:pointer;user-select:none;border-left:4px solid var(--cc,#7c6ff7)}
 .sort-mode .card-header{padding-left:0}
 .card-left{display:flex;align-items:center;gap:11px}
-.bank-chip{width:42px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:0.6rem;font-weight:700;color:#fff;flex-shrink:0}
+.bank-chip{width:52px;height:34px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:800;color:#fff;flex-shrink:0;letter-spacing:0.02em;text-shadow:0 1px 3px rgba(0,0,0,0.4)}
 .card-name{font-size:0.88rem;font-weight:600}
 .card-sub{font-size:0.7rem;color:var(--muted);margin-top:1px}
 .card-right{display:flex;align-items:center;gap:6px}
@@ -98,6 +98,18 @@ main{padding:14px;max-width:600px;margin:0 auto}
 .txn-amt{font-family:'DM Mono',monospace;font-size:.88rem}
 .txn-del{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.85rem;padding:2px 4px}
 .txn-del:hover{color:var(--danger)}
+.txn-edit{background:none;border:none;color:var(--muted);cursor:pointer;font-size:.78rem;padding:2px 4px}
+.txn-edit:hover{color:#7c6ff7}
+
+/* BILLING TAB */
+.billing-list{display:flex;flex-direction:column;gap:8px}
+.billing-item{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px;border-left:4px solid var(--bc,#7c6ff7)}
+.billing-bank{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+.billing-chip{width:52px;height:34px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:800;color:#fff;flex-shrink:0;text-shadow:0 1px 3px rgba(0,0,0,0.4)}
+.billing-name{font-size:.85rem;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.billing-sub{font-size:.68rem;color:var(--muted);margin-top:1px}
+.billing-day{font-family:'DM Mono',monospace;font-size:.9rem;color:var(--text);text-align:right;flex-shrink:0}
+.billing-day span{font-size:.65rem;color:var(--muted);font-family:'Noto Sans TC',sans-serif}
 
 .rebate-input-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .rebate-input-row label{font-size:.75rem;color:var(--muted);white-space:nowrap}
@@ -193,6 +205,7 @@ input[type="color"]{width:36px;height:36px;border-radius:50%;border:2px solid va
 <div class="tabs">
   <div class="tab active" id="tab-cards" onclick="switchTab('cards')">💳 我的卡片</div>
   <div class="tab" id="tab-txns" onclick="switchTab('txns')">📋 所有消費</div>
+  <div class="tab" id="tab-billing" onclick="switchTab('billing')">📅 結帳日</div>
 </div>
 
 <main>
@@ -222,6 +235,11 @@ input[type="color"]{width:36px;height:36px;border-radius:50%;border:2px solid va
     </div>
     <div class="all-txn-filter" id="filterChips"></div>
     <div class="all-txn-list" id="allTxnList"></div>
+  </div>
+
+  <div id="view-billing" style="display:none">
+    <div style="margin-top:4px;margin-bottom:14px;font-size:.78rem;color:var(--muted)">各卡結帳日一覽，點卡片可編輯</div>
+    <div class="billing-list" id="billingList"></div>
   </div>
 </main>
 
@@ -283,7 +301,7 @@ input[type="color"]{width:36px;height:36px;border-radius:50%;border:2px solid va
     <div class="form-group"><label>備註（選填）</label><input id="t_note" placeholder=""/></div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeTxnModal()">取消</button>
-      <button class="btn-primary" onclick="saveTxn()">新增</button>
+      <button class="btn-primary" id="txnSaveBtn" onclick="saveTxn()">新增</button>
     </div>
   </div>
 </div>
@@ -317,12 +335,17 @@ const DOC = doc(db, "data", "main");
 const PRESET_COLORS=['#7c6ff7','#4f46e5','#0ea5e9','#10b981','#f59e0b','#ef4444','#ec4899','#8b5cf6','#14b8a6','#f97316','#06b6d4','#84cc16','#e11d48','#0284c7'];
 const CATEGORIES=['餐飲','超市','交通','娛樂','購物','旅遊','醫療','加油','訂閱','其他'];
 const MN=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+const BANK_BILL_DAYS={
+  '國泰世華':17,'玉山銀行':12,'台新銀行':20,'永豐銀行':25,
+  '中國信託':20,'台北富邦':14,'聯邦銀行':25,'遠東銀行':25,
+  '渣打銀行':20,'滙豐銀行':20,'花旗銀行':14,'其他':null
+};
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let cards=[], txns=[], rebate={};
 const now=new Date();
 let viewYear=now.getFullYear(), viewMonth=now.getMonth();
-let currentTab='cards', editCardId=null, txnCardId=null;
+let currentTab='cards', editCardId=null, txnCardId=null, editTxnId=null;
 let selectedColor='#7c6ff7', selectedCat='其他', filterCard='all';
 let sortMode=false, dragSrcIdx=null;
 let saveTimer=null;
@@ -387,8 +410,10 @@ function switchTab(tab) {
   currentTab=tab;
   document.getElementById('view-cards').style.display=tab==='cards'?'':'none';
   document.getElementById('view-txns').style.display=tab==='txns'?'':'none';
+  document.getElementById('view-billing').style.display=tab==='billing'?'':'none';
   document.getElementById('tab-cards').classList.toggle('active',tab==='cards');
   document.getElementById('tab-txns').classList.toggle('active',tab==='txns');
+  document.getElementById('tab-billing').classList.toggle('active',tab==='billing');
   render();
 }
 window.switchTab=switchTab;
@@ -494,7 +519,8 @@ function render(){
   document.getElementById('monthLabel2').textContent=lbl;
   document.getElementById('dateLabel').textContent=`今日：${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()}`;
   if(currentTab==='cards')renderCards();
-  else renderAllTxns();
+  else if(currentTab==='txns')renderAllTxns();
+  else renderBilling();
 }
 
 function renderCards(){
@@ -533,6 +559,7 @@ function renderCards(){
           </div>
           <div class="txn-right">
             <div class="txn-amt">$${fmt(t.amt)}</div>
+            <button class="txn-edit" onclick="editTxn('${t.id}','${c.id}')">✎</button>
             <button class="txn-del" onclick="delTxn('${t.id}')">✕</button>
           </div>
         </div>`).join('');
@@ -649,6 +676,27 @@ function renderAllTxns(){
 }
 window.setFilter=id=>{filterCard=id;render()};
 
+function renderBilling(){
+  const list=document.getElementById('billingList');
+  if(!cards.length){list.innerHTML=`<div class="empty"><div class="big">📅</div><p>尚無卡片</p></div>`;return}
+  // group by bank, show same-bank cards together
+  list.innerHTML=cards.map(c=>{
+    const color=c.color||'#7c6ff7';
+    const bankAbbr=(c.bank||'銀').slice(0,2);
+    const day=c.billDay||'?';
+    return `<div class="billing-item" style="--bc:${color}" onclick="openCardModal('${c.id}')">
+      <div class="billing-bank">
+        <div class="billing-chip" style="background:${color}">${esc(bankAbbr)}</div>
+        <div>
+          <div class="billing-name">${esc(c.name)}</div>
+          <div class="billing-sub">${esc(c.bank)}</div>
+        </div>
+      </div>
+      <div class="billing-day">每月 ${day} 日<br><span>結帳日</span></div>
+    </div>`;
+  }).join('');
+}
+
 // ─── CARD MODAL ───────────────────────────────────────────────────────────────
 function buildColorPicker(sel){
   selectedColor=sel||'#7c6ff7';
@@ -664,7 +712,7 @@ function openCardModal(id){
   document.getElementById('cardModalTitle').textContent=id?'✎ 編輯信用卡':'✦ 新增信用卡';
   document.getElementById('f_name').value=c?.name||'';
   document.getElementById('f_bank').value=c?.bank||'國泰世華';
-  document.getElementById('f_billDay').value=c?.billDay||'';
+  document.getElementById('f_billDay').value=c?.billDay||BANK_BILL_DAYS['國泰世華']||'';
   document.getElementById('f_pct').value=c?.pct||'';
   document.getElementById('f_cap').value=c?.cap||'';
   document.getElementById('f_cycle').value=c?.cycle||'billing';
@@ -673,6 +721,14 @@ function openCardModal(id){
   document.getElementById('f_minspend').value=c?.minspend||'';
   document.getElementById('f_memo').value=c?.memo||'';
   buildColorPicker(c?.color||'#7c6ff7');
+  // wire up bank auto-fill (only for new cards)
+  const bankSel=document.getElementById('f_bank');
+  bankSel.onchange=()=>{
+    if(!editCardId){
+      const def=BANK_BILL_DAYS[bankSel.value];
+      if(def) document.getElementById('f_billDay').value=def;
+    }
+  };
   document.getElementById('cardModal').classList.add('open');
 }
 window.openCardModal=openCardModal;
@@ -708,9 +764,11 @@ function selectCat(c){selectedCat=c;buildCatChips(c)}
 window.selectCat=selectCat;
 
 function openTxnModal(cardId){
+  editTxnId=null;
   txnCardId=cardId;
   const card=cards.find(c=>c.id===cardId);
   document.getElementById('txnModalTitle').textContent=`📝 新增消費 — ${card?.name||''}`;
+  document.getElementById('txnSaveBtn').textContent='新增';
   document.getElementById('t_amt').value='';
   document.getElementById('t_name').value='';
   document.getElementById('t_note').value='';
@@ -723,14 +781,44 @@ function openTxnModal(cardId){
 }
 window.openTxnModal=openTxnModal;
 
+function editTxn(txnId, cardId){
+  const t=txns.find(x=>x.id===txnId);
+  if(!t)return;
+  editTxnId=txnId;
+  txnCardId=cardId;
+  const card=cards.find(c=>c.id===cardId);
+  document.getElementById('txnModalTitle').textContent=`✎ 編輯消費 — ${card?.name||''}`;
+  document.getElementById('txnSaveBtn').textContent='儲存';
+  document.getElementById('t_amt').value=t.amt;
+  document.getElementById('t_name').value=t.name||'';
+  document.getElementById('t_note').value=t.note||'';
+  document.getElementById('t_date').value=t.date;
+  buildCatChips(t.cat||'其他');
+  document.getElementById('txnModal').classList.add('open');
+}
+window.editTxn=editTxn;
+
 function closeTxnModal(){document.getElementById('txnModal').classList.remove('open')}
 window.closeTxnModal=closeTxnModal;
 
 async function saveTxn(){
   const amt=parseFloat(document.getElementById('t_amt').value);
   if(!amt||amt<=0){showToast('請輸入金額');return}
-  txns.push({id:uid(),cardId:txnCardId,amt,date:document.getElementById('t_date').value,name:document.getElementById('t_name').value.trim()||'消費',cat:selectedCat,note:document.getElementById('t_note').value.trim()});
-  scheduleSave(); closeTxnModal(); render(); showToast('已新增 ✓');
+  const data={
+    id:editTxnId||uid(), cardId:txnCardId, amt,
+    date:document.getElementById('t_date').value,
+    name:document.getElementById('t_name').value.trim()||'消費',
+    cat:selectedCat,
+    note:document.getElementById('t_note').value.trim()
+  };
+  if(editTxnId){
+    const i=txns.findIndex(t=>t.id===editTxnId);
+    if(i>=0)txns[i]=data;
+  } else {
+    txns.push(data);
+  }
+  scheduleSave(); closeTxnModal(); render();
+  showToast(editTxnId?'已更新 ✓':'已新增 ✓');
 }
 window.saveTxn=saveTxn;
 
