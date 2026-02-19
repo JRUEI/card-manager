@@ -603,14 +603,14 @@ function renderCards(){
           </div>
         </div>
         <div class="card-right" style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-          <span class="pct-badge" style="background:${color};font-size:.82rem;padding:4px 10px">${pct}%</span>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
-            ${remainBadge||`<span style="font-size:.63rem;color:var(--muted)">—</span>`}
-            <div style="font-size:.63rem;color:var(--muted);font-family:'DM Mono',monospace;line-height:1">
+          <span class="pct-badge" style="background:${color};font-size:.85rem;padding:6px 10px;line-height:1">${pct}%</span>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:80px">
+            ${remainBadge||`<span style="font-size:.65rem;color:var(--muted)">無上限</span>`}
+            <span style="font-size:.65rem;color:var(--muted);font-family:'DM Mono',monospace">
               ${c.cycle==='billing'?getBillingPeriod(c.billDay):'每月1日起'}
-            </div>
+            </span>
           </div>
-          <span style="color:var(--muted);font-size:.8rem;align-self:center" id="chev_${c.id}">▼</span>
+          <span style="color:var(--muted);font-size:.8rem" id="chev_${c.id}">▼</span>
         </div>
       </div>
       <div class="card-body" id="body_${c.id}">
